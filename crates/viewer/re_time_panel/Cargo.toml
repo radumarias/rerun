@@ -37,6 +37,8 @@ itertools.workspace = true
 serde.workspace = true
 vec1.workspace = true
 
+rand = "0.8.5"
+
 [dev-dependencies]
 anyhow.workspace = true
 criterion.workspace = true

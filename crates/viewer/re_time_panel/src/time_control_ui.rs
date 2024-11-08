@@ -1,10 +1,16 @@
+use std::string::ToString;
 use egui::NumExt as _;
-
+use rand::{Rng, thread_rng};
 use re_entity_db::TimesPerTimeline;
-use re_log_types::TimeType;
+use re_log_types::{TimeReal, TimeType};
 use re_ui::{list_item, UiExt as _};
 
 use re_viewer_context::{Looping, PlayState, TimeControl};
+
+static mut SHOW_ADD_BOOKMARK: bool = false;
+static mut ADD_BOOKMARK_NAME: String = String::new();
+static mut BOOKMARKS: Vec<(String, f64)> = vec![];
+static mut SHOW_BOOKMARKS: bool = false;
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct TimeControlUi;
@@ -55,7 +61,7 @@ The logging SDK always creates two timelines for you:
 
 You can also define your own timelines, e.g. for sensor time or camera frame number.
 "
-                            .trim(),
+                                .trim(),
                         );
 
                         ui.re_hyperlink(
@@ -80,7 +86,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
                             .speed(1)
                             .range(0.0..=f32::INFINITY),
                     )
-                    .on_hover_text("Frames per second");
+                        .on_hover_text("Frames per second");
                 });
                 time_control.set_fps(fps);
             }
@@ -100,6 +106,8 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             self.pause_button_ui(time_control, ui);
             self.step_time_button_ui(time_control, ui, times_per_timeline);
             self.loop_button_ui(time_control, ui);
+            self.add_bookmark_button_ui(time_control, ui, times_per_timeline);
+            self.show_bookmarks_button_ui(time_control, ui, times_per_timeline);
         });
     }
 
@@ -117,6 +125,94 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             .clicked()
         {
             time_control.set_play_state(times_per_timeline, PlayState::Playing);
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    fn add_bookmark_button_ui(
+        &mut self,
+        time_control: &mut TimeControl,
+        ui: &mut egui::Ui,
+        _times_per_timeline: &TimesPerTimeline,
+    ) {
+        // Create a large blue button with "Add Bookmark" text
+        let button = egui::Button::new("Add Bookmark")
+            .fill(egui::Color32::from_rgb(0, 122, 255)); // Set the background color to blue
+
+        if ui.add(button).on_hover_text("Add bookmark").clicked()
+        {
+            unsafe { SHOW_ADD_BOOKMARK = true; }
+            unsafe { ADD_BOOKMARK_NAME = format!("bookmark {}", thread_rng().gen_range(1..42)); }
+        }
+        if unsafe { SHOW_ADD_BOOKMARK } {
+            // Calculate center position
+            let screen_rect = ui.ctx().screen_rect();
+            let popup_width = 300.0;
+            let popup_height = 100.0;
+            let popup_pos = screen_rect.center() - egui::vec2(popup_width / 2.0, popup_height / 2.0);
+
+            egui::Window::new("Bookmark name")
+                .collapsible(false)
+                .resizable(false)
+                // .fixed_size(egui::vec2(popup_width, popup_height))
+                // .default_pos(popup_pos)
+                .show(ui.ctx(), |ui| {
+                    unsafe { ui.text_edit_singleline(&mut ADD_BOOKMARK_NAME); }
+
+                    if ui.button("Save").clicked() {
+                        unsafe { SHOW_ADD_BOOKMARK = false; }
+                        unsafe { println!("User entered: {}", ADD_BOOKMARK_NAME); }
+                        // Handle the collected input here
+                        unsafe { BOOKMARKS.push((ADD_BOOKMARK_NAME.clone(), time_control.time().unwrap().as_f64())); }
+                    }
+
+                    if ui.button("Cancel").clicked() {
+                        unsafe { SHOW_ADD_BOOKMARK = false; }
+                    }
+                });
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    fn show_bookmarks_button_ui(
+        &mut self,
+        time_control: &mut TimeControl,
+        ui: &mut egui::Ui,
+        _times_per_timeline: &TimesPerTimeline,
+    ) {
+        let button = egui::Button::new("Add Bookmark")
+            .fill(egui::Color32::from_rgb(255, 255, 0));
+
+        if ui.add(button).on_hover_text("Bookmarks").clicked()
+        {
+            unsafe { SHOW_BOOKMARKS = true; }
+        }
+        if unsafe { SHOW_BOOKMARKS } {
+            // Calculate center position
+            let screen_rect = ui.ctx().screen_rect();
+            let popup_width = 300.0;
+            let popup_height = 100.0;
+            let popup_pos = screen_rect.center() - egui::vec2(popup_width / 2.0, popup_height / 2.0);
+
+            egui::Window::new("Bookmarks")
+                .collapsible(false)
+                .resizable(false)
+                .fixed_size(egui::vec2(200.0, 150.0))
+                .show(ui.ctx(), |ui| {
+                    unsafe {
+                        for (name, ts) in BOOKMARKS.iter() {
+                            if ui.button(name.clone()).clicked() {
+                                println!("Selected item: {}", name);
+                                // SHOW_BOOKMARKS = false;
+                                time_control.set_time(TimeReal::from(*ts))
+                            }
+                        }
+                    }
+
+                    if ui.button("Close").clicked() {
+                        unsafe { SHOW_BOOKMARKS = false; }
+                    }
+                });
         }
     }
 
@@ -229,7 +325,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
                     .speed(drag_speed)
                     .suffix("x"),
             )
-            .on_hover_text("Playback speed");
+                .on_hover_text("Playback speed");
         });
 
         time_control.set_speed(speed);
